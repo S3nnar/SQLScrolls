@@ -1,5 +1,5 @@
 # backend/api/Dockerfile
-FROM node:20-slim
+FROM node:lts
 
 ## Set Port
 ENV PORT=4001
