@@ -21,6 +21,34 @@ const cors = require("cors");
 
 router.use(cors());
 
+
+async function findAuthenticatedUser(req) {
+    const users = db.get().collection("users");
+    return users.findOne({_id: new ObjectId(req.auth.userId)});
+}
+
+async function requireAdmin(req, res, next) {
+    try {
+        const currentUser = await findAuthenticatedUser(req);
+        if (!currentUser || currentUser.isAdmin !== true) {
+            return res.status(403).json({error: "Admin access required."});
+        }
+        req.currentUser = currentUser;
+        return next();
+    } catch (err) {
+        return next(err);
+    }
+}
+
+function sanitizeAdminResult(collection, items) {
+    if (collection !== "users" && collection !== "users_archive") return items;
+    return items.map((item) => {
+        if (!item || typeof item !== "object") return item;
+        const {password, resetPasswordToken, resetPasswordExpires, ...rest} = item;
+        return rest;
+    });
+}
+
 // /users/register
 router.post("/register", reqBodyValidator(registerPOST), async function ({body: user}, res, next) {
 
@@ -567,4 +595,194 @@ router.get("/recommend-task", async function (req, res) {
 });
 
 // export
+
+router.get("/admin/operations/summary", requireAdmin, async function (req, res, next) {
+    try {
+        const users = db.get().collection("users");
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+        const [totalUsers, activeUsersLast7Days, admins] = await Promise.all([
+            users.countDocuments({}),
+            users.countDocuments({timeLastActive: {$gte: oneWeekAgo}}),
+            users.countDocuments({isAdmin: true}),
+        ]);
+
+        return res.json({
+            totalUsers,
+            activeUsersLast7Days,
+            admins,
+            generatedAt: new Date(),
+        });
+    } catch (err) {
+        return next(err);
+    }
+});
+
+router.get("/admin/operations/recent-users", requireAdmin, async function (req, res, next) {
+    try {
+        const users = db.get().collection("users");
+        const limit = Math.min(Number(req.query.limit) || 25, 100);
+        const recentUsers = await users
+            .find({}, {projection: {password: 0, resetPasswordToken: 0, resetPasswordExpires: 0}})
+            .sort({registrationDate: -1})
+            .limit(limit)
+            .toArray();
+
+        return res.json(recentUsers);
+    } catch (err) {
+        return next(err);
+    }
+});
+
+router.patch("/admin/operations/users/:userId/stars", requireAdmin, async function (req, res, next) {
+    try {
+        const users = db.get().collection("users");
+        const userId = req.params.userId;
+        const stars = Number(req.body.stars);
+
+        if (!ObjectId.isValid(userId)) return res.status(400).json({error: "Invalid user id."});
+        if (!Number.isFinite(stars) || stars < 0) {
+            return res.status(400).json({error: "Stars must be a non-negative number."});
+        }
+
+        const result = await users.findOneAndUpdate(
+            {_id: new ObjectId(userId)},
+            {$set: {stars}},
+            {returnDocument: "after", projection: {password: 0, resetPasswordToken: 0, resetPasswordExpires: 0}}
+        );
+
+        if (!result.value) return res.status(404).json({error: "User not found."});
+        return res.json(result.value);
+    } catch (err) {
+        return next(err);
+    }
+});
+
+router.post("/admin/query", requireAdmin, async function (req, res, next) {
+    try {
+        const {collection, action = "find", filter, projection, sort, limit, pipeline, update, replacement, document, documents, options, command} = req.body;
+        const allowedCollections = ["users", "users_archive"];
+        const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 1000);
+
+        if (action === "runCommand") {
+            if (!command || typeof command !== "object") {
+                return res.status(400).json({error: "Command must be a JSON object."});
+            }
+            const result = await db.get().command(command);
+            return res.json({action, result});
+        }
+
+        if (!allowedCollections.includes(collection)) {
+            return res.status(400).json({error: "Collection is not allowed."});
+        }
+
+        const coll = db.get().collection(collection);
+        const safeFilter = filter && typeof filter === "object" ? filter : {};
+        const safeProjection = projection && typeof projection === "object" ? projection : {};
+        const safeSort = sort && typeof sort === "object" ? sort : {_id: -1};
+        const safeOptions = options && typeof options === "object" ? options : {};
+
+        let result;
+        switch (action) {
+            case "aggregate":
+                if (!Array.isArray(pipeline)) return res.status(400).json({error: "Pipeline must be an array."});
+                result = await coll.aggregate(pipeline, safeOptions).limit(safeLimit).toArray();
+                return res.json({action, collection, count: result.length, result: sanitizeAdminResult(collection, result)});
+            case "find":
+                result = await coll.find(safeFilter, {projection: safeProjection, ...safeOptions}).sort(safeSort).limit(safeLimit).toArray();
+                return res.json({action, collection, count: result.length, result: sanitizeAdminResult(collection, result)});
+            case "updateOne":
+                if (!update || typeof update !== "object") return res.status(400).json({error: "Update must be a JSON object."});
+                result = await coll.updateOne(safeFilter, update, safeOptions);
+                return res.json({action, collection, matchedCount: result.matchedCount, modifiedCount: result.modifiedCount, upsertedId: result.upsertedId});
+            case "updateMany":
+                if (!update || typeof update !== "object") return res.status(400).json({error: "Update must be a JSON object."});
+                result = await coll.updateMany(safeFilter, update, safeOptions);
+                return res.json({action, collection, matchedCount: result.matchedCount, modifiedCount: result.modifiedCount, upsertedId: result.upsertedId});
+            case "replaceOne":
+                if (!replacement || typeof replacement !== "object") return res.status(400).json({error: "Replacement must be a JSON object."});
+                result = await coll.replaceOne(safeFilter, replacement, safeOptions);
+                return res.json({action, collection, matchedCount: result.matchedCount, modifiedCount: result.modifiedCount, upsertedId: result.upsertedId});
+            case "insertOne":
+                if (!document || typeof document !== "object") return res.status(400).json({error: "Document must be a JSON object."});
+                result = await coll.insertOne(document, safeOptions);
+                return res.json({action, collection, insertedId: result.insertedId});
+            case "insertMany":
+                if (!Array.isArray(documents)) return res.status(400).json({error: "Documents must be an array."});
+                result = await coll.insertMany(documents, safeOptions);
+                return res.json({action, collection, insertedCount: result.insertedCount, insertedIds: result.insertedIds});
+            case "deleteOne":
+                result = await coll.deleteOne(safeFilter, safeOptions);
+                return res.json({action, collection, deletedCount: result.deletedCount});
+            case "deleteMany":
+                result = await coll.deleteMany(safeFilter, safeOptions);
+                return res.json({action, collection, deletedCount: result.deletedCount});
+            default:
+                return res.status(400).json({error: "Unsupported action."});
+        }
+    } catch (err) {
+        return next(err);
+    }
+});
+
+router.patch("/admin/operations/users/bulk-update", requireAdmin, async function (req, res, next) {
+    try {
+        const users = db.get().collection("users");
+        const {
+            userIds = [],
+            usernames = [],
+            update = {},
+            applyToRelatedCollections = true,
+            relatedCollections = ["users_archive"],
+        } = req.body;
+
+        const validUserIds = userIds.filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
+        const validUsernames = usernames.filter((name) => typeof name === "string" && name.trim().length > 0);
+
+        if (!validUserIds.length && !validUsernames.length) {
+            return res.status(400).json({error: "Provide at least one userId or username."});
+        }
+        if (!update || typeof update !== "object" || Object.keys(update).length === 0) {
+            return res.status(400).json({error: "Update operators are required."});
+        }
+
+        const userFilter = {$or: []};
+        if (validUserIds.length) userFilter.$or.push({_id: {$in: validUserIds}});
+        if (validUsernames.length) userFilter.$or.push({username: {$in: validUsernames}});
+
+        const userUpdateResult = await users.updateMany(userFilter, update);
+
+        const relatedResults = [];
+        if (applyToRelatedCollections && Array.isArray(relatedCollections)) {
+            for (const collectionName of relatedCollections) {
+                if (collectionName !== "users_archive") continue;
+                const collection = db.get().collection(collectionName);
+                const relatedFilter = {
+                    $or: [
+                        {username: {$in: validUsernames}},
+                        {"_id._id": {$in: validUserIds}},
+                    ],
+                };
+                const relatedUpdateResult = await collection.updateMany(relatedFilter, update);
+                relatedResults.push({
+                    collection: collectionName,
+                    matchedCount: relatedUpdateResult.matchedCount,
+                    modifiedCount: relatedUpdateResult.modifiedCount,
+                });
+            }
+        }
+
+        return res.json({
+            users: {
+                matchedCount: userUpdateResult.matchedCount,
+                modifiedCount: userUpdateResult.modifiedCount,
+            },
+            relatedCollections: relatedResults,
+        });
+    } catch (err) {
+        return next(err);
+    }
+});
+
 module.exports = router;

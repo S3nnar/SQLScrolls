@@ -30,6 +30,32 @@ the "Database Technology" course.
 
 ---
 
+## 🔐 Admin Panel (neu)
+
+- Die Admin-Oberfläche liegt auf einer eigenen Seite: `frontend/admin-panel.html`.
+- Ein **Admin-Button** wird erst eingeblendet, wenn der eingeloggte User im Backend das Flag `isAdmin: true` hat.
+- Zusätzliche Sicherheit: Alle Admin-API-Endpunkte prüfen serverseitig Admin-Rechte. Ein direkter Aufruf der URL reicht nicht.
+- Der Query-Bereich unterstützt Admin-Aktionen für Lesen und Schreiben auf freigegebenen Collections (`users`, `users_archive`) inklusive `find`, `aggregate`, `update*`, `insert*`, `delete*` und `runCommand`.
+
+### Admin-User sicher anlegen
+
+Am sichersten ist ein Bootstrap über Umgebungsvariablen (nicht im Code, nicht im Git):
+
+```bash
+cd backend/api
+ADMIN_BOOTSTRAP_USERNAME=admin@example.com \
+ADMIN_BOOTSTRAP_PASSWORD='mindestens-16-zeichen-langes-passwort' \
+npm run admin:create
+```
+
+Empfehlung:
+- Starkes, einzigartiges Passwort (mind. 16 Zeichen)
+- `.env` **nicht** committen
+- Admin nur für echte Admin-Konten setzen
+- Änderungen mit Schreibrechten zuerst in einer Testumgebung prüfen
+
+---
+
 ## 🚀 Deployment with Docker
 
 ### ⚡ Quick Start: Production Ready

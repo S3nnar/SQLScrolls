@@ -271,6 +271,7 @@ async function beginGame() {
                 await showElementImmediately("counter-container");
                 await showElementImmediately("right-sidebar");
                 await showElementImmediately("relative-leaderboard");
+                await API.setAdminMenuVisibility();
             } else {
                 if (location.pathname !== "/editors.html") {
                     // TODO: check that it is not empty
