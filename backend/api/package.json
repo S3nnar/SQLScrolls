@@ -12,7 +12,8 @@
     "start:dev": "node_modules/.bin/nodemon server.js",
     "test": "node_modules/.bin/jest",
     "test:coverage": "node_modules/.bin/jest --coverage",
-    "test:watch": "node_modules/.bin/jest --watch"
+    "test:watch": "node_modules/.bin/jest --watch",
+    "admin:create": "node scripts/createAdminUser.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

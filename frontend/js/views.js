@@ -1155,6 +1155,7 @@ class LoginView extends View {
                 await showElementImmediately("counter-container");
                 await showElementImmediately("right-sidebar");
                 await showElementImmediately("relative-leaderboard");
+                await API.setAdminMenuVisibility();
                 loadCompletionFromQuizzes();
             }
         } catch (e) {
@@ -1188,6 +1189,7 @@ class LoginView extends View {
                 await showElementImmediately("counter-container");
                 await showElementImmediately("right-sidebar");
                 await showElementImmediately("relative-leaderboard");
+                await API.setAdminMenuVisibility();
                 loadCompletionFromQuizzes();
             }
         } catch (e) {

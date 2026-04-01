@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>SQLScrolls Admin Panel</title>
+    <link href="libs/bootstrap/bootstrap.min.css" rel="stylesheet"/>
+    <style>
+        body { background: #10131a; color: #f7f7f7; padding: 24px; }
+        .card { background: #1b2130; border: 1px solid #303a52; margin-bottom: 16px; }
+        .form-control, .form-select, textarea { background: #0f1420; color: #fff; border: 1px solid #37415d; }
+        pre { background: #0a0f1a; color: #9be7ff; padding: 12px; border-radius: 8px; max-height: 420px; overflow: auto; }
+    </style>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1>Admin Panel</h1>
+        <div><a class="btn btn-outline-light" href="index.html">Zurück zum Spiel</a></div>
+    </div>
+
+    <div id="error" class="alert alert-danger d-none"></div>
+
+    <div class="card p-3">
+        <h3>Vordefinierte Operationen</h3>
+        <div class="mb-2">
+            <button id="load-summary" class="btn btn-primary">System-Übersicht laden</button>
+            <button id="load-recent" class="btn btn-secondary">Neueste User laden</button>
+        </div>
+
+        <h5>Mehrere User gleichzeitig aktualisieren</h5>
+        <label class="form-label" for="bulk-user-ids">User IDs (kommagetrennt)</label>
+        <input id="bulk-user-ids" class="form-control mb-2" placeholder="67f... , 67a..."/>
+        <label class="form-label" for="bulk-usernames">Usernames (kommagetrennt, optional)</label>
+        <input id="bulk-usernames" class="form-control mb-2" placeholder="user1@example.com,user2@example.com"/>
+        <label class="form-label" for="bulk-update-json">MongoDB Update-Operatoren (z.B. $set, $unset, $push, $pull, $inc)</label>
+        <textarea id="bulk-update-json" rows="7" class="form-control">{"$set":{"classKey":"DB101","isPublic":false},"$unset":{"aliasName":""}}</textarea>
+        <div class="form-check mt-2 mb-2">
+            <input class="form-check-input" type="checkbox" id="bulk-related" checked>
+            <label class="form-check-label" for="bulk-related">Auch zugehörige Collections aktualisieren (aktuell: users_archive)</label>
+        </div>
+        <button id="bulk-update" class="btn btn-warning">Bulk-Update ausführen</button>
+    </div>
+
+    <div class="card p-3">
+        <h3>Eigene Admin-Query (Lesen + Schreiben)</h3>
+        <p class="mb-2">Hinweis: Das System verwendet MongoDB. Dieser Editor führt MongoDB-Aktionen aus (statt SQL-Syntax).</p>
+        <div class="row">
+            <div class="col-md-3">
+                <label class="form-label" for="query-collection">Collection</label>
+                <select id="query-collection" class="form-select">
+                    <option value="users">users</option>
+                    <option value="users_archive">users_archive</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label" for="query-action">Aktion</label>
+                <select id="query-action" class="form-select">
+                    <option value="find">find</option>
+                    <option value="aggregate">aggregate</option>
+                    <option value="updateOne">updateOne</option>
+                    <option value="updateMany">updateMany</option>
+                    <option value="replaceOne">replaceOne</option>
+                    <option value="insertOne">insertOne</option>
+                    <option value="insertMany">insertMany</option>
+                    <option value="deleteOne">deleteOne</option>
+                    <option value="deleteMany">deleteMany</option>
+                    <option value="runCommand">runCommand</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label" for="query-limit">Limit (für find/aggregate)</label>
+                <input id="query-limit" class="form-control" type="number" value="50" min="1" max="1000"/>
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <button id="run-query" class="btn btn-success w-100">Ausführen</button>
+            </div>
+        </div>
+        <label class="form-label mt-3" for="query-json">JSON Payload</label>
+        <textarea id="query-json" rows="9" class="form-control">{"filter":{},"projection":{"password":0},"sort":{"_id":-1}}</textarea>
+    </div>
+
+    <div class="card p-3">
+        <h3>Antwort</h3>
+        <pre id="output">Warte auf Eingabe…</pre>
+    </div>
+</div>
+
+<script src="js/configuration.js"></script>
+<script src="js/api.js"></script>
+<script src="js/admin-panel.js"></script>
+</body>
+</html>

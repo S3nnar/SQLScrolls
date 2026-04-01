@@ -10,6 +10,7 @@ const API = {
     loginStatus: LoginStatus.LOGGED_OUT,
     token: undefined,
     switchaai: false,
+    isAdminUser: false,
     cachedAnswerData: {
         loading: false,
         loaded: false,
@@ -440,6 +441,62 @@ const API = {
     },
 
 // getUsers() handles the functionality if the username or aliasName is displayed
+    async refreshAdminStatus() {
+        try {
+            if (this.loginStatus !== LoginStatus.LOGGED_IN) {
+                this.isAdminUser = false;
+                return false;
+            }
+            const data = await this.self();
+            this.isAdminUser = data && data.isAdmin === true;
+            return this.isAdminUser;
+        } catch (error) {
+            this.isAdminUser = false;
+            return false;
+        }
+    },
+    async setAdminMenuVisibility() {
+        const adminMenu = document.getElementById("admin-menu");
+        if (!adminMenu) return;
+        if (await this.refreshAdminStatus()) {
+            adminMenu.classList.remove("hidden");
+        } else {
+            adminMenu.classList.add("hidden");
+        }
+    },
+    adminGetSummary() {
+        return this.authenticatedJsonRequest("GET", `${this.getAPIAddress()}/users/admin/operations/summary`);
+    },
+    adminGetRecentUsers(limit = 25) {
+        return this.authenticatedJsonRequest("GET", `${this.getAPIAddress()}/users/admin/operations/recent-users?limit=${encodeURIComponent(limit)}`);
+    },
+    adminUpdateUserStars(userId, stars) {
+        return this.authenticatedJsonRequest("PATCH", `${this.getAPIAddress()}/users/admin/operations/users/${encodeURIComponent(userId)}/stars`, {stars});
+    },
+    adminRunCustomQuery(payload) {
+        return this.authenticatedJsonRequest("POST", `${this.getAPIAddress()}/users/admin/query`, payload);
+    },
+    adminBulkUpdateUsers(payload) {
+        return this.authenticatedJsonRequest("PATCH", `${this.getAPIAddress()}/users/admin/operations/users/bulk-update`, payload);
+    },
+    authenticatedJsonRequest(method, url, body) {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.onreadystatechange = function () {
+                if (this.readyState === 4) {
+                    if (this.status >= 200 && this.status < 300) {
+                        resolve(this.response ? JSON.parse(this.response) : {});
+                    } else {
+                        reject(this.response || `Bad response code '${xhr.status}'`);
+                    }
+                }
+            };
+            xhr.open(method, url, true);
+            xhr.setRequestHeader("Authorization", "Bearer " + API.token);
+            xhr.setRequestHeader("Content-type", "application/json");
+            xhr.send(body ? JSON.stringify(body) : undefined);
+        });
+    },
     async getUsers(globalLeaderboard = true) {
         try {
             // Check the value of globalLeaderboard to determine which API call to make
